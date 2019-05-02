@@ -138,7 +138,7 @@ def main():
     # hotspot / coldspot difference, > 1
     diffs = [10, 10, 20, 20, 40, 40, 60, 60]
     # mean rho values
-    rhos = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 2.5]
+    rhos = [0.0001, 0.001, 0.01, 0.1, 1.0, 2.5]
     # rhos = [0.0001]
     # hotspot length
     hotspot_lengths = [2000]
