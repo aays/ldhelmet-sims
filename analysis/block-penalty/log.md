@@ -274,3 +274,281 @@ and so the file will be (in the order ACGT)
 0.11 0.2 0.11 0.57
 ```
 
+alright - now for the sims:
+
+- generate 1 Mb for each of 19 individuals
+- repeat simulation for different background recombination rates
+    - Singhal - 0.0001, 0.001, 0.01, 0.1, 1, 2.5
+- theta = 0.03
+- mutation matrix = data/mut_mat
+
+sim structure: pseudocode
+
+```
+for rho in [0.0001, 0.001, 0.01, 0.1, 1, 2.5]:
+    generate 19 indivs, 1 Mb of sequence each, rcmb = $rho
+    for hotspot_heat in [10x, 20x, 40x, 60x]:
+        add 2 hotspots w/ relative heat $hotspot heat
+
+repeat each parameter set 12 times (we'll just do 10)
+
+remove singletons from simulated haps
+
+for block in 5, 10, 50, 100, 500:
+    run LDhelmet on haps w/ block = $block
+```
+
+from Singhal's supplementary:
+
+For these simulation results, we asked two questions. First, which block penalty provides the
+most accurate general picture of recombination rates? To address this question, we calculated how
+much inferred rates from LDhelmet deviated from known recombination rates across the entire
+length of the 1 Mb of simulated sequence. These results suggested that block penalty 100 provided the most accurate estimation of background recombination rate across a range of recombination rates (Fig. S30). Second, we asked which block penalty provides the best power to identify
+hotspots. To answer this question, we identified putative hotspots in the inferred recombination
+maps, identifying regions 2 kb or greater that had 5× or greater recombination rate than their 80
+kb of surrounding sequence, as was done with the empirical data. From this, we calculated the
+power to identify hotspots at each given parameter set, finding that block penalty 5 provided the
+most power (Fig. S31).
+
+sample macs run - from the docs:
+
+./macs 100 1e6 -T -t .001 -r .001 -h 1e2 -R example_input/hotspot.txt -F example_input/ascertainment.txt 0 2>trees.txt | ./msformatter > haplotypes.txt
+
+The command line arguments above says:
+Simulate 100 sequences on a region 1e6 basepairs long.  The per base pair mutation and recombination rate scaled at 4N is .001.  The h parameter approximates the Markovian order by instructing the program to include all geneologies from the current point to 1e2 base pairs to the left if one considers simulation proceeding from the left end to the right end of the entire sequence.  Any branches unique to the geneology that is beyond 1e2 base pairs is pruned from the ARG. -T tells MACS to output the local trees in Newick format similar to MS output.
+
+in our command:
+
+- 1 Mb
+- theta (-t) = 0.03
+- rho (-r) = 0.0001
+- hotspots -> -R file
+    - hotspots are 2 kb
+    - evenly spread - `starts = np.linspace(50e3, 1e6 - 50e3, 10)`
+        - ends are each value + 2000
+        - need to divide start and end by 1e6
+        - Singhal script seems to lock diffs to 5
+
+## 23/4/2019
+
+let's try a 'naive' macs run:
+
+first, making the tab separated hotspot file (`test_hotspot`)
+
+```
+0   0.3 0.57
+```
+
+and then
+
+```bash
+./bin/macs 19 1e6 -t 0.03 -r 0.0001 -R data/macs-runs/test_hotspot | bin/msformatter
+```
+
+pulling in the Singhal script - need to figure out the equilibrium base freqs and
+the modified mutation matrix (ie for all i != j, Pij := Pij / (1 - Pii))
+
+
+total freqs:
+
+```python
+>>> x = {'A': 18847066, 'T': 18860148, 'G': 33664023, 'C': 33678905}
+>>> total = sum(x.values())
+>>> total
+105050142
+>>> for k, v in x.items():
+  2     print(k, round(v / total, 3))
+A 0.179
+C 0.321
+T 0.18
+G 0.32
+```
+
+remainder of the matrix - getting relative, non-diag frequencies: 
+
+```
+0.61 0.11 0.19 0.09
+0.26 0 0.22 0.52
+0.5 0.22 0.03 0.25
+0.11 0.2 0.11 0.57
+```
+
+or alternatively:
+
+```
+d = {
+'AA': 0.61,
+'AC': 0.11,
+'AG': 0.19,
+'AT': 0.09,
+'CA': 0.26,
+'CC': -0.0,
+'CG': 0.22,
+'CT': 0.52,
+'GA': 0.5,
+'GC': 0.22,
+'GG': 0.03,
+'GT': 0.25,
+'TA': 0.11,
+'TC': 0.2,
+'TG': 0.11,
+'TT': 0.57
+}
+```
+
+and so:
+
+```python
+>>> d = {
+  2 'AA': 0.61,
+  3 'AC': 0.11,
+  4 'AG': 0.19,
+  5 'AT': 0.09,
+  6 'CA': 0.26,
+  7 'CC': -0.0,
+  8 'CG': 0.22,
+  9 'CT': 0.52,
+ 10 'GA': 0.5,
+ 11 'GC': 0.22,
+ 12 'GG': 0.03,
+ 13 'GT': 0.25,
+ 14 'TA': 0.11,
+ 15 'TC': 0.2,
+ 16 'TG': 0.11,
+ 17 'TT': 0.57
+ 18 }
+>>> d
+{'TA': 0.11, 'TG': 0.11, 'AT': 0.09, 'GG': 0.03, 'GC': 0.22, 'GT': 0.25, 'CA': 0.26, 'CC': -0.0, 'CT': 0.52, 'CG': 0.22, 'TT': 0.57, 'AG': 0.19, 'TC': 0.2, 'AC': 0.11, 'AA': 0.61, 'GA': 0.5}
+>>> non_diag_sums = dict.fromkeys(['A', 'C', 'G', 'T'], 0.0)
+>>> for k, v in d.items():
+  2     anc, mut = k[0], k[1]
+  3     if anc != mut:
+  4         non_diag_sums[anc] += v
+>>> non_diag_sums
+{'A': 0.39, 'C': 1.0, 'G': 0.97, 'T': 0.42000000000000004}
+>>> for k, v in d.items():
+  2     anc, mut = k[0], k[1]
+  3     if anc != mut:
+  4         d[k] = v / non_diag_sums[anc]
+>>> d
+{'TA': 0.26190476190476186, 'TG': 0.26190476190476186, 'AT': 0.23076923076923075, 'GG': 0.03, 'GC': 0.2268041237113402, 'GT': 0.2577319587628866, 'CA': 0.26, 'CC': -0.0, 'CT': 0.52, 'CG': 0.22, 'TT': 0.57, 'AG': 0.48717948717948717, 'TC': 0.47619047619047616, 'AC': 0.28205128205128205, 'AA': 0.61, 'GA': 0.5154639175257733}
+>>> # checking
+>>> d['TA'] + d['TC'] + d['TG']
+0.9999999999999999
+>>> for k, v in d.items():
+  2     anc, mut = k[0], k[1]
+  3     if anc != mut:
+  4         print(anc, mut, round(v, 3))
+T A 0.262
+T G 0.262
+A T 0.231
+G C 0.227
+G T 0.258
+C A 0.26
+C T 0.52
+C G 0.22
+A G 0.487
+T C 0.476
+A C 0.282
+G A 0.515
+```
+
+these can now be manually added in to the script - and the script is now ready to run in full!
+
+```bash
+time python3.5 analysis/block-penalty/simulations_hotspot_power.py \
+--outdir data/macs-runs
+```
+
+## 29/4/2019
+
+so that took a while:
+
+```bash
+real    2157m56.549s
+user    2031m27.540s
+sys     128m59.895s
+```
+
+but now we're good to start some LDhelmet runs - there are 100 haps to run LDhelmet on
+
+this is probably best done with a shell script that iterates through the haps,
+runs the indiv LDhelmet steps on them, and deletes temp files as soon as they're no longer needed
+
+```bash
+count=1
+filecount=$(ls data/macs-runs/haplotypes | wc -l)
+block=$1
+mkdir -p data/macs-runs/ldhelmet/block_${block}
+mkdir -p data/macs-runs/ldhelmet/block_${block}/finals
+outdir=block_$1
+
+for fname in data/macs-runs/haplotypes/*fa; do
+    base=$(basename $fname .fa)
+    echo "Currently on ${base}"
+    echo "File ${count} of ${filecount}"
+
+    time ./bin/ldhelmet find_confs \    
+    --num_threads 10 \  
+    --window_size 50 \  
+    --output_file data/macs-runs/ldhelmet/${outdir}/${base}.conf ${fname}
+
+    sleep 1
+
+    time ./bin/ldhelmet table_gen \    
+    --num_threads 10 \  
+    --conf_file data/macs-runs/ldhelmet/${outdir}/${base}.conf \   
+    --theta 0.03 \  
+    --rhos 0.0 0.1 10.0 1.0 100.0 \ 
+    --output_file data/macs-runs/ldhelmet/${outdir}/${base}.lk > table_gen 2> table_gen2   
+
+    rm -v table_gen* 
+
+    time ./bin/ldhelmet pade \ 
+    --num_threads 10 \  
+    --conf_file data/macs-runs/ldhelmet/${outdir}/${base}.conf \   
+    --theta 0.03 \  
+    --output_file data/macs-runs/ldhelmet/${outdir}/${base}.pade   
+
+     time ./bin/ldhelmet rjmcmc \   
+    --num_threads 10 \  
+    --window_size 50 \  
+    --seq_file ${filename} \    
+    --lk_file data/macs-runs/ldhelmet/${outdir}/${base}.lk \   
+    --pade_file data/macs-runs/ldhelmet/${outdir}/${base}.pade \   
+    --num_iter 1000000 \    
+    --burn_in 100000 \  
+    --block_penalty ${block} \    
+    --mut_mat_file data/mut_mat
+    --output_file data/recombination-ldhelmet/intermediate-files/${base}.post   
+
+     time ./bin/ldhelmet post_to_text \ 
+    --mean \    
+    --perc 0.025 \  
+    --perc 0.50 \   
+    --perc 0.975 \  
+    --output_file data/macs-runs/ldhelmet/${outdir}/finals/${base}.txt \ 
+    data/macs-runs/ldhelmet/${outdir}/${base}.post 
+
+    sleep 3    
+
+    echo "Removing temp files..."    
+    rm -v data/macs-runs/ldhelmet/${outdir}/${base}.* ;
+
+    (( count ++ ))
+
+done
+```
+
+followed by
+
+```bash
+time bash analysis/block-penalty/ldhelmet_block.sh 50
+```
+
+to start at block = 50. 
+
+
+
+
+
