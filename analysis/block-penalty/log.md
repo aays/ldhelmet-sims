@@ -549,6 +549,83 @@ time bash analysis/block-penalty/ldhelmet_block.sh 50
 to start at block = 50. 
 
 
+## 5/5/2019
+
+so rho = 0.1 is agonizingly slow - while this is going
+on, let's queue a temp script up for block = 5 at rho = 0.0001
+
+```bash
+# same as above file, but fixed parameters
+# block = 5, rho = 0.0001
+time bash ldhelmet_block_temp_2.sh
+```
+
+## 6/5/2019
+
+so this went pretty fast by comparison (done in 7 hours)
+which tells me LDhelmet likes lower rho values
+
+now getting rho = 0.001 going for block = 5
+
+update: even faster - done in 144 min
+
+now on rho = 0.01 for block = 5
+
+update: 149 min for that - running rho = 0.1 and 1.0 
+simultaneously - it seems the MCMC step is quite fast at block = 5
+
+## 7/5/2019
+
+so both of these were done in the wee hours of the morning
+
+running the final one (rho = 2.5) for block = 5
+as well as the first one (rho = 0.0001) for block = 10
+
+## 8/5/2019
+
+the rho = 1.0 block = 50 script is finally done
+after 6400 m! (that's 4 days!) - wonder what slowed
+that down so much
+
+meanwhile - block 5 is completely done for all rhos
+
+continuing block = 10 (0.0001 is done) over 0.001 and 0.01 and
+also queuing up the final block = 50 (rho = 2.5)
+
+update - the block 10s are done? queuing up rho = 0.1 and 1.0
+
+## 9/5/2019
+
+queuing up rho = 2.5 for block = 10 - and with that, block 10 is done
+(as will be block 50 when the rho = 2.5 run is done)
+
+last but not least, block = 100. queuing up rho = 0.0001
+
+also reminder to self to run rho = 2.5 replicate 100 for block 50 separately! 
+that was not included in the temp script somehow
+
+## 10/5/2019
+
+running rho = 2.5 replicate 100 on its own
+
+rho = 0.0001 for block = 100 is done (took 14 hours) - will
+queue up the others after the current three jobs are done
+
+## 11/5/2019
+
+queuing up rho = 0.001 for block = 100
+
+block = 10 is done - queuing up rho = 0.01 for block = 100
+
+## 12/5/2019
+
+0.001 and 0.01 for block = 100 are done
+
+queuing up 0.1 and 1.0 next - almost done!
+
+interesting though that block = 50 takes the longest
+
+
 
 
 
