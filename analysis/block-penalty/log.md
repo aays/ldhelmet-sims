@@ -623,8 +623,14 @@ block = 10 is done - queuing up rho = 0.01 for block = 100
 
 queuing up 0.1 and 1.0 next - almost done!
 
-interesting though that block = 50 takes the longest
+interesting though that block = 50 takes the longest...
 
+## 15/5/2019
+
+block 50 is done (with rho = 2.5 taking 6 straight days)
+
+queuing up 100-104 and 105-109 for rho = 2.5 and block = 100 separately - and
+then we'll be done!
 
 
 
