@@ -632,6 +632,79 @@ block 50 is done (with rho = 2.5 taking 6 straight days)
 queuing up 100-104 and 105-109 for rho = 2.5 and block = 100 separately - and
 then we'll be done!
 
+## 25/5/2019
+
+today: adapt `find_hotspots.py` for use with simulation outputs
+
+this should be a more generalized script - will also be using
+it to summarise the actual recombination estimates when LDhelmet
+is run on chlamy itself
+
+need to compare:
+- accuracy of mean background rho estimate across different block penalties
+    - try this including + excluding hotspots
+- accuracy of hotspot estimates
+
+grabbing a quick 'test dataset':
+
+```
+cp -v data/macs-runs/ldhelmet/block_50/finals/haplo_rho0.01_100.txt .
+mv -v haplo_rho0.01_100.txt rho_test.txt
+```
+
+update: let's just use `find_hotspots.py` - after adding in chlamy chromosome
+lengths and removing some of the hardcoded paths it should be good
+for use as is
+
+## 26/5/2019
+
+script to run `find_hotspots.py` over all sims
+
+added a chr called 'sim' that's 1e6 bp in length
+
+initial run over 0.0001, block = 5:
+
+```bash
+mkdir -p data/macs-runs/ldhelmet_2k
+mkdir -p data/macs-runs/ldhelmet_2k/block_5
+
+for run in {0..9}; do
+    time python3.5 analysis/block-penalty/find_hotspots.py \
+    --input data/macs-runs/ldhelmet/block_5/finals/haplo_rho0.0001_10${run}.txt \
+    --out data/macs-runs/ldhelmet_2k/block_5/haplo_rho0.0001_10${run}.txt \
+    --chr sim \
+    --block 2000 \
+    --flank 40000 ;
+done
+
+```
+
+## 27/5/2019
+
+looks good - doing the same for the other blocks:
+
+```bash
+for block in 5 10 50 100; do
+    mkdir -p data/macs-runs/ldhelmet_2k/block_${block};
+    for rho in 0.0001 0.001 0.01 0.1 1.0 2.5; do
+        echo "currently on rho ${rho} for block ${block}";
+        for run in {0..9}; do
+            python3.5 analysis/block-penalty/find_hotspots.py \
+            --input data/macs-runs/ldhelmet/block_${block}/finals/haplo_rho${rho}_10${run}.txt \
+            --out data/macs-runs/ldhelmet_2k/block_${block}/haplo_rho${rho}_10${run}.txt \
+            --chr sim \
+            --block 2000 \
+            --flank 40000 ;
+        done
+    done
+done
+
+```
+
+
+
+
+
 
 
 
