@@ -1,0 +1,215 @@
+---
+title: "Block penalty simulations analysis"
+author: Ahmed Hasan
+output: pdf_notebook
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+require('knitr')
+opts_knit$set(root.dir = '../../')
+```
+
+
+```{r}
+library(tidyverse)
+library(fs)
+library(magrittr, warn.conflicts = FALSE)
+```
+
+# Loading in data
+
+```{r}
+load_ldhelmet_files <- function(block_dir) {
+  
+  full_dir <- paste0('data/macs-runs/ldhelmet_2k/', block_dir)
+  
+  out <- dir_ls(full_dir) %>% 
+    map_dfr(., read_csv, col_types = cols(), .id = 'name') %>% 
+    select(-chr) %>%
+    mutate(name = str_extract(name, '[0-9]\\.[0-9]+_10[0-9]')) %>% # get fname
+    separate(name, into = c('rho', 'run'), sep = '_', convert = TRUE) %>%  # pull rho + run out of fname
+    rename(start = block_start, end = block_end)
+  return(out)
+}
+
+block_5 <- load_ldhelmet_files('block_5')
+block_10 <- load_ldhelmet_files('block_10')
+block_50 <- load_ldhelmet_files('block_50')
+block_100 <- load_ldhelmet_files('block_100')
+
+block_5
+```
+
+# Exploring the data
+
+## Overall distributions
+
+What does the distribution of rho look like in block = 10?
+
+```{r}
+ggplot(block_10, aes(x = block_rate)) +
+  geom_histogram() +
+  theme_classic()
+```
+
+Hotspots were supposed to be placed as follows:
+
+```
+0.0500	0.0520	10.00000
+0.1786	0.1806	10.00000
+0.3071	0.3091	20.00000
+0.4357	0.4377	20.00000
+0.5643	0.5663	40.00000
+0.6929	0.6949	40.00000
+0.8214	0.8234	60.00000
+0.9500	0.9520	60.00000
+```
+
+Where the first two columns represent chunks of the sequence (over [0, 1])
+and the third one represents fold increase over baseline rho (i.e. value in filename)
+
+These can be stuck into a data frame for easy comparison:
+
+```{r}
+hotspots <- data.frame(
+  prop_start = c(0.0500, 0.1786, 0.3071, 0.4357, 0.5643, 0.6929, 0.8214, 0.9500),
+  prop_end = c(0.0520, 0.1806, 0.3091, 0.4377, 0.5663, 0.6949, 0.8234, 0.9520),
+  rate_increase = c(10, 10, 20, 20, 40, 40, 60, 60)
+) %>%
+  mutate(exact_start = prop_start * 1e6,
+         exact_end = prop_end * 1e6) %>% 
+  select(-starts_with('prop')) %>% 
+  mutate(start = round(exact_start / 1000) * 1000,
+         end = round(exact_end / 1000) * 1000) %>% 
+  select(start, end, everything())
+```
+
+## Background rho estimation
+
+Which block penalty gives the most accurate background rho estimates? (not including hotspots)
+
+```{r}
+
+non_overlapping <- function(df, windowsize) {
+  df %<>%
+    mutate(div = floor(start / windowsize), div2 = lead(div)) %>%
+    filter(div == div2) %>%
+    select(-contains('div'))
+  return(df)
+}
+
+# starting with block 5
+# quick and dirty visualization
+block_5 %>%
+  anti_join(hotspots, by = c('start', 'end')) %>% 
+  ggplot(aes(x = block_rate)) +
+  geom_histogram() +
+  geom_vline(aes(xintercept = rho)) +
+  facet_wrap(~ rho) +
+  theme_classic()
+
+block_5 %>% 
+  anti_join(hotspots, by = c('start', 'end')) %>% 
+  non_overlapping(2000) %>% 
+  group_by(rho) %>% 
+  summarise(estimate = mean(block_rate)) %>% 
+  mutate(obs_exp = estimate / rho)
+  
+```
+
+Expanding to all datasets:
+
+```{r}
+d_all <- list(block_5, block_10, block_50, block_100)
+names(d_all) <- c(5, 10, 50, 100)
+
+d_all %>% 
+  map_dfr(~ anti_join(., hotspots, by = c('start', 'end')) %>% 
+            non_overlapping(2000) %>% 
+            group_by(rho) %>% 
+            summarise(estimate = mean(block_rate)) %>% 
+            mutate(obs_exp = estimate / rho),
+          .id = 'block') %>% 
+  mutate(block = as.numeric(block),
+         rho = forcats::fct_relevel(
+           as.factor(rho), 
+           levels = c('1e-04', '0.001', '0.01', '0.1', '1', '2.5'))
+         ) %>% 
+  ggplot(aes(x = rho, y = obs_exp, color = block)) +
+  geom_point() +
+  geom_line() + 
+  geom_hline(yintercept = 1) +
+  theme_classic()
+```
+
+Looks like block = 100 is our best bet here. 
+
+
+## Hotspot power estimation
+
+power = 1 - prob of false negatives (known hotspots not detected as hotspots)
+
+For each rho -> 10 runs, with 8 hotspots each -> max of 80 hotspots per background rho per block
+
+20 hotspots per rate increase value per rho (group by rho, rate_increase and tally)
+
+
+```{r}
+d_all %>% 
+  map_dfr(~ inner_join(., hotspots, by = c('start', 'end')) %>% 
+  filter(rate_ratio >= rate_increase) %>% 
+  group_by(rho, rate_increase) %>% 
+  tally() %>% 
+  mutate(power = n / 20), # how many of the 20 were correctly called as hotspots
+  .id = 'block') %>% 
+  ggplot(aes(x = rate_increase, y = power, color = block)) +
+  geom_point() + geom_line() +
+  facet_wrap(~ rho)
+```
+
+Expected:
+
+```{r}
+block_5 %>% 
+  inner_join(hotspots, by = c('start', 'end')) %>% 
+  # filter(rate_ratio >= rate_increase) %>% 
+  group_by(rho, rate_increase) %>% 
+  tally()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

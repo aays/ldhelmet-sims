@@ -701,6 +701,56 @@ done
 
 ```
 
+## 29/5/2019
+
+looking at these files in `analysis/block-penalty/comparisons.Rmd`
+
+block penalty = 100 seems to be the best bet for background rho!
+
+looks like power is relatively poor with 2 kb windows and 40 kb flanks though - below 0.5 for all rates/blocks
+
+## 30/5/2019
+
+creating a shell script (`summarise_hotspots.sh`) to run different combinations of windows/flanks:
+
+```bash
+w=$1
+flank=$2
+
+for block in 5 10 50 100; do
+    mkdir -p data/macs-runs/ldhelmet_${w}_${flank}/block_${block};
+    for rho in 0.0001 0.001 0.01 0.1 1.0 2.5; do
+        echo "currently on rho ${rho} for block ${block}";
+        for run in {0..9}; do
+            python3.5 analysis/block-penalty/find_hotspots.py \
+            --input data/macs-runs/ldhelmet/block_${block}/finals/haplo_rho${rho}_10${run}.txt \
+            --out data/macs-runs/ldhelmet_${w}_${flank}/block_${block}/haplo_rho${rho}_10${run}.txt \
+            --chr sim \
+            --block ${w} \
+            --flank ${flank} ;
+        done
+    done
+done
+```
+
+also renaming `ldhelmet_2k` to `ldhelmet_2k_40k` to include flank size as well
+
+run with 4 kb windows and 40 kb flank sizes:
+
+```bash
+time bash analysis/block_penalty/summarise_hotspots.sh 4000 40000
+```
+
+
+
+
+
+
+
+
+
+
+
 
 
 
