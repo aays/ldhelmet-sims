@@ -733,12 +733,23 @@ for block in 5 10 50 100; do
 done
 ```
 
-also renaming `ldhelmet_2k` to `ldhelmet_2k_40k` to include flank size as well
+also renaming `ldhelmet_2k` to `ldhelmet_2000_40000` to include flank size as well
 
 run with 4 kb windows and 40 kb flank sizes:
 
 ```bash
 time bash analysis/block_penalty/summarise_hotspots.sh 4000 40000
+```
+
+took about 40 minutes
+
+trying different flank sizes first - let's do 20k, 60k, 80k, and 100k
+
+```bash
+for flank in 20000 60000 80000 100000; do
+  echo "currently on flank ${flank}"
+  time bash analysis/block_penalty/summarise_hotspots.sh 2000 ${flank};
+done
 ```
 
 

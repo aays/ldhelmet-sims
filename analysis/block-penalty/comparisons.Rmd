@@ -14,14 +14,16 @@ opts_knit$set(root.dir = '../../')
 library(tidyverse)
 library(fs)
 library(magrittr, warn.conflicts = FALSE)
+library(glue)
 ```
 
 # Loading in data
 
 ```{r}
-load_ldhelmet_files <- function(block_dir) {
+load_ldhelmet_files <- function(window, flank, block) {
+  # window and flank in kb
   
-  full_dir <- paste0('data/macs-runs/ldhelmet_2k/', block_dir)
+  full_dir <- glue('data/macs-runs/ldhelmet_{window}_{flank}/block_{block}')
   
   out <- dir_ls(full_dir) %>% 
     map_dfr(., read_csv, col_types = cols(), .id = 'name') %>% 
@@ -32,10 +34,10 @@ load_ldhelmet_files <- function(block_dir) {
   return(out)
 }
 
-block_5 <- load_ldhelmet_files('block_5')
-block_10 <- load_ldhelmet_files('block_10')
-block_50 <- load_ldhelmet_files('block_50')
-block_100 <- load_ldhelmet_files('block_100')
+block_5 <- load_ldhelmet_files(2000, 40000, 5)
+block_10 <- load_ldhelmet_files(2000, 40000, 10)
+block_50 <- load_ldhelmet_files(2000, 40000, 50)
+block_100 <- load_ldhelmet_files(2000, 40000, 100)
 
 block_5
 ```
@@ -177,6 +179,48 @@ block_5 %>%
   tally()
 ```
 
+Creating a generalized function to repeat the above operation for different window/flank sizes:
+
+```{r}
+hotspot_power <- function(window, flank, verbose = FALSE) {
+  # read in files
+  dfs_all <- list()
+  blocks <- c(5, 10, 50, 100)
+  for (i in seq_along(blocks)) {
+    dfs_all[[i]] <- load_ldhelmet_files(window, flank, blocks[i])
+  }
+  names(dfs_all) <- blocks
+  
+  # hotspot counts
+  div <- window / 2
+  hotspot_df <- data.frame(
+    prop_start = c(0.0500, 0.1786, 0.3071, 0.4357, 0.5643, 0.6929, 0.8214, 0.9500),
+    prop_end = c(0.0520, 0.1806, 0.3091, 0.4377, 0.5663, 0.6949, 0.8234, 0.9520),
+    rate_increase = c(10, 10, 20, 20, 40, 40, 60, 60)
+  ) %>%
+    mutate(exact_start = prop_start * 1e6,
+           exact_end = prop_end * 1e6) %>% 
+    select(-starts_with('prop')) %>% 
+    mutate(start = round(exact_start / div) * div,
+           end = round(exact_end / div) * div) %>% 
+    select(start, end, everything())
+  
+  dfs_all %<>%
+    map_dfr(
+      ~ inner_join(., hotspot_df, by = c('start', 'end')) %>% 
+        filter(rate_ratio >= rate_increase) %>% 
+        group_by(rho, rate_increase) %>% 
+        tally() %>% 
+        mutate(power = n / 20),
+      .id = 'block'
+    )
+  if (verbose == TRUE) {
+    message('done')
+  }
+  return(dfs_all)
+}
+
+```
 
 
 
