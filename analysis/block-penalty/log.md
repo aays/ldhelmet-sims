@@ -753,6 +753,16 @@ done
 ```
 
 
+## 31/5/2019
+
+files above done - took about 100-160 minutes each
+
+loading into `comparisons.Rmd` and continuing analysis
+
+looks like block = 100 is our best bet for background rho,
+while block = 5 w/ windowsize 2000 and flank size 60000 is best for finding hotspots
+(but power is still relatively low - should also use a second hotspot validation method
+like Singhal et al did)
 
 
 

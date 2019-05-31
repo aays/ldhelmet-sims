@@ -223,9 +223,54 @@ hotspot_power <- function(window, flank, verbose = FALSE) {
 ```
 
 
+Trying out flank = [20, 60, 80, 100]:
 
+```{r}
+options(scipen = 50) # prevent 100000 from being converted to 1e05
 
+flank_20k <- hotspot_power(2000, 20000)
+flank_40k <- hotspot_power(2000, 40000)
+flank_60k <- hotspot_power(2000, 60000)
+flank_80k <- hotspot_power(2000, 80000)
+flank_100k <- hotspot_power(2000, 100000)
+```
 
+Plots:
+
+```{r}
+power_plot <- function(d) {
+  p <- d %>% 
+    ggplot(aes(x = rate_increase, y = power, color = block)) +
+    geom_point() + 
+    geom_line() +
+    facet_wrap(~ rho) +
+    coord_cartesian(y = c(0, 1))
+  return(p)
+}
+```
+
+```{r}
+power_plot(flank_20k)
+power_plot(flank_40k)
+power_plot(flank_60k)
+power_plot(flank_80k)
+power_plot(flank_100k)
+```
+
+```{r}
+flank_list <- list(flank_20k, flank_40k, flank_60k, flank_80k, flank_100k)
+names(flank_list) <- c(20, 40, 60, 80, 100)
+
+flank_list %>% 
+  bind_rows(.id = 'flank') %>% 
+  ggplot(aes(x = factor(flank, levels = c(20, 40, 60, 80, 100)), y = power)) +
+  geom_boxplot() +
+  facet_wrap(~ factor(block, levels = c(5, 10, 50, 100))) +
+  coord_cartesian(y = c(0, 1)) +
+  labs(x = 'flank')
+```
+
+Seems we have diminishing returns here - block 5 with 60 kb is the optimal way to go. 
 
 
 
