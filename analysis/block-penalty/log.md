@@ -764,18 +764,7 @@ while block = 5 w/ windowsize 2000 and flank size 60000 is best for finding hots
 (but power is still relatively low - should also use a second hotspot validation method
 like Singhal et al did)
 
+## 1/6/2019
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+renaming `comparisons.Rmd` to `analysis.Rmd` and wrapping this up
 
