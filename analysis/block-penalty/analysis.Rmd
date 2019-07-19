@@ -15,6 +15,10 @@ library(tidyverse)
 library(fs)
 library(magrittr, warn.conflicts = FALSE)
 library(glue)
+
+# for exporting plots
+din1 <- 6.34375
+din2 <- 3.385417
 ```
 
 # Loading in data
@@ -174,10 +178,14 @@ fig_s1 <- d_all %>%
   ) +
   theme(
     axis.title = element_text(family = 'Helvetica', size = 14),
-    axis.text = element_text(family = 'Helvetica', size = 14, colour = 'black')
+    axis.text = element_text(family = 'Helvetica', size = 14, colour = 'black'),
+    legend.title = element_text(family = 'Helvetica', size = 14, colour = 'black'),
+    legend.text = element_text(family = 'Helvetica', size = 10, colour = 'black')
   )
 
 fig_s1
+
+# ggsave('plots/fig_s1.pdf', plot = fig_s1, width = din2 * 1.5, height = din2)
 ```
 
 
@@ -334,6 +342,8 @@ fig_s2 <- flank_list %>%
   )
 
 fig_s2
+
+# ggsave('plots/fig_s2.pdf', plot = fig_s2, width = din1, height = din2 * 1.25)
 ```
 
 
