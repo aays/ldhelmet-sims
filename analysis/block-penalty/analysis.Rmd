@@ -206,7 +206,7 @@ For each rho -> 10 runs, with 8 hotspots each -> max of 80 hotspots per backgrou
 ```{r}
 d_all %>% 
   map_dfr(~ inner_join(., hotspots, by = c('start', 'end')) %>% 
-  filter(rate_ratio >= rate_increase) %>% 
+  filter(rate_ratio >= 5) %>% 
   group_by(rho, rate_increase) %>% 
   tally() %>% 
   mutate(power = n / 20), # how many of the 20 were correctly called as hotspots
@@ -255,7 +255,7 @@ hotspot_power <- function(window, flank, verbose = FALSE) {
   dfs_all %<>%
     map_dfr(
       ~ inner_join(., hotspot_df, by = c('start', 'end')) %>% 
-        filter(rate_ratio >= rate_increase) %>% 
+        filter(rate_ratio >= 5) %>% 
         group_by(rho, rate_increase) %>% 
         tally() %>% 
         mutate(power = n / 20),
@@ -360,7 +360,7 @@ flank_list %>%
   group_by(flank, block) %>% 
   summarise(power = sum(n) / 80) %>% 
   arrange(-power)
-# block 5, flank 60 highest - power = 0.488
+# block 5, flank 60 highest - power = 0.9375
 ```
 
 
