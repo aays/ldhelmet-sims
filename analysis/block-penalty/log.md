@@ -738,7 +738,7 @@ also renaming `ldhelmet_2k` to `ldhelmet_2000_40000` to include flank size as we
 run with 4 kb windows and 40 kb flank sizes:
 
 ```bash
-time bash analysis/block_penalty/summarise_hotspots.sh 4000 40000
+time bash analysis/block-penalty/summarise_hotspots.sh 4000 40000
 ```
 
 took about 40 minutes
@@ -748,7 +748,7 @@ trying different flank sizes first - let's do 20k, 60k, 80k, and 100k
 ```bash
 for flank in 20000 60000 80000 100000; do
   echo "currently on flank ${flank}"
-  time bash analysis/block_penalty/summarise_hotspots.sh 2000 ${flank};
+  time bash analysis/block-penalty/summarise_hotspots.sh 2000 ${flank};
 done
 ```
 
@@ -767,4 +767,311 @@ like Singhal et al did)
 ## 1/6/2019
 
 renaming `comparisons.Rmd` to `analysis.Rmd` and wrapping this up
+
+## 5/12/2019
+
+post-review - need to vary the length of hotspots (ie percent hotspot coverage)
+as well and see whether that has any effect on block penalty choice
+
+adding a new parameter to `simulations_hotspot_power.py` that varies hotspot length
+
+in literature - hotspot sizes vary from 2 - 7.5 kb in finches (Singhal) and 2 - 5 kb in yeast (Tsai)
+
+will vary across lengths = [2000, 4000, 6000] based on hotspot sizes seen in the literature - ie
+need to rerun sims twice over (eek!) 
+
+adding a `hotspot_length` parameter to `simulations_hotspot_power.py` - iirc
+this took 2100 min (1.5 days) to run, so I should get two of these running in
+parallel
+
+first, creating a second `macs-runs` dir (so as not to break paths in code
+doing stuff w/ the original folder) - will call it `macs-runs-hotspot-length`,
+with two subfolders (for each of the hotspot lengths)
+
+and now we run both - running these in different shells since `parallel` has
+been funky lately:
+
+```bash
+mkdir -p data/macs-runs-hotspot-length
+mkdir -p data/macs-runs-hotspot-length/hot_4k
+mkdir -p data/macs-runs-hotspot-length/hot_6k
+mkdir -p data/macs-runs-hotspot-length/hot_4k/hotspots
+mkdir -p data/macs-runs-hotspot-length/hot_6k/hotspots # needed by the script
+mkdir -p data/macs-runs-hotspot-length/hot_4k/haplotypes
+mkdir -p data/macs-runs-hotspot-length/hot_6k/haplotypes
+mkdir -p data/macs-runs-hotspot-length/hot_4k/ancallele
+mkdir -p data/macs-runs-hotspot-length/hot_6k/ancallele
+
+
+time python3.5 analysis/block-penalty/simulations_hotspot_power.py \
+--hotspot_length 4000 \
+--outdir data/macs-runs-hotspot-length/hot_4k
+
+time python3.5 analysis/block-penalty/simulations_hotspot_power.py \
+--hotspot_length 6000 \
+--outdir data/macs-runs-hotspot-length/hot_6k
+```
+
+and now we wait! 
+
+
+## 6/12/2019
+
+so this worked out pretty smoothly it seems, and faster than the previous
+iteration did too:
+
+```
+# 4k
+real    1116m22.174s
+user    987m17.137s
+sys     130m47.661s
+
+# 6k
+real    1193m2.950s
+user    1037m19.494s
+sys     157m17.925s
+```
+
+now to queue up some long LDhelmet runs
+
+modifying `ldhelmet_block.sh` to reflect the new dirs (and also making them)
+
+```bash
+mkdir -p data/macs-runs-hotspot-length/hot_4k/ldhelmet
+mkdir -p data/macs-runs-hotspot-length/hot_6k/ldhelmet
+```
+
+`ldhelmet_block_hot.sh`:
+
+```
+block=$1
+rho=$2
+heat=$3
+mkdir -p data/macs-runs-hotspot-length/hot_${heat}k/ldhelmet/block_${block}
+mkdir -p data/macs-runs-hotspot-length/hot_${heat}k/ldhelmet/block_${block}/finals
+hotdir=hot_${heat}k
+outdir=block_$1
+
+for iter in {0..9}; do
+    base=haplo_rho${rho}_10${iter}
+    echo "currently on ${base}"
+
+    time ./bin/ldhelmet find_confs \
+    --num_threads 10 \
+    --window_size 50 \
+    --output_file data/macs-runs-hotspot-length/hot_${heat}k/ldhelmet/${outdir}/${base}.conf \
+    data/macs-runs-hotspot-length/${hotdir}/haplotypes/${base}.fa
+
+    sleep 1
+
+    echo "table_gen for ${base}"
+
+    time ./bin/ldhelmet table_gen \
+    --num_threads 10 \
+    --conf_file data/macs-runs-hotspot-length/${hotdir}/ldhelmet/${outdir}/${base}.conf \
+    --theta 0.03 \
+    --rhos 0.0 0.1 10.0 1.0 100.0 \
+    --output_file data/macs-runs-hotspot-length/${hotdir}/ldhelmet/${outdir}/${base}.lk > ${rho}_${heat}_table_gen 2> $
+
+    rm -v ${rho}_${heat}_table_gen*
+
+    sleep 1
+
+    time ./bin/ldhelmet pade \
+    --num_threads 10 \
+    --conf_file data/macs-runs-hotspot-length/${hotdir}/ldhelmet/${outdir}/${base}.conf \
+    --theta 0.03 \
+    --output_file data/macs-runs-hotspot-length/${hotdir}/ldhelmet/${outdir}/${base}.pade
+
+    sleep 1
+
+    time ./bin/ldhelmet rjmcmc \
+    --num_threads 30 \
+    --window_size 50 \
+    --seq_file data/macs-runs-hotspot-length/${hotdir}/haplotypes/${base}.fa \
+    --lk_file data/macs-runs-hotspot-length/${hotdir}/ldhelmet/${outdir}/${base}.lk \
+    --pade_file data/macs-runs-hotspot-length/${hotdir}/ldhelmet/${outdir}/${base}.pade \
+    --num_iter 1000000 \
+    --burn_in 100000 \
+    --block_penalty ${block} \
+    --mut_mat_file data/mut_mat \
+    --output_file data/macs-runs-hotspot-length/${hotdir}/ldhelmet/${outdir}/${base}.post
+
+    sleep 1
+
+    time ./bin/ldhelmet post_to_text \
+    --mean \
+    --perc 0.025 \
+    --perc 0.50 \
+    --perc 0.975 \
+    --output_file data/macs-runs-hotspot-length/${hotdir}/ldhelmet/${outdir}/finals/${base}.txt \
+    data/macs-runs-hotspot-length/${hotdir}/ldhelmet/${outdir}/${base}.post
+
+    sleep 3
+
+    echo "Removing temp files..."
+    rm -v data/macs-runs-hotspot-length/${hotdir}/ldhelmet/${outdir}/${base}.* ;
+
+    (( count ++ ))
+
+    date
+
+done
+```
+
+with the args `block`, `rho`, and `heat` respectively - let's give this a trial run
+
+```bash
+bash analysis/block-penalty/ldhelmet_block_hot.sh 5 0.0001 4
+```
+
+looks good and hasn't broken yet - let's queue the next ones up:
+
+```bash
+for rho in 0.0001 0.001 0.01 0.1 1.0 2.5; do
+    time bash analysis/block-penalty/ldhelmet_block_hot.sh 5 ${rho} 4;
+done
+```
+
+## 8/12/2019
+
+these are going by pretty fast! 
+
+starting up block 10 for 4k
+
+```bash
+time for rho in 0.0001 0.001 0.01 0.1 1.0 2.5; do
+    time bash analysis/block-penalty/ldhelmet_block_hot.sh 10 ${rho} 4;
+done
+```
+
+## 10/12/2019
+
+getting block 50 queued up for 4k - doing a loop w/ 0.0001, 0.001, and 0.01
+
+## 11/12/2019
+
+block 50 queued up for 4k still, but now for 0.1, 1.0, and 2.5
+
+it seems 2.5 takes especially long (ie days), fwiw, so might want to start up
+a third shell to do block 100 once this loop hits 2.5
+
+## 12/12/2019
+
+2.5 done - took 3 days to run
+
+starting up block 100 for 4k - doing a for loop w/ 0.0001, 0.001, and 0.01
+
+## 13/12/2019
+
+now for block 100 for 4k - 0.1, 1.0, and 2.5
+
+## 21/12/2019
+
+so that final block 50 loop took A While - 9.6 days to be exact
+
+now to start with 6k - doing a for loop for
+block 5 0.0001, 0.001, and 0.01
+
+## 22/12/2019
+
+queueing up block 10 0.0001 0.001 and 0.01
+(will do higher rhos later, since those take longer)
+
+## 23/12/2019
+
+today - block 50 0.0001 0.001 and 0.01
+
+## 24/12/2019
+
+queuing block 100 0.0001 0.001 and 0.01
+
+tomorrow - queue up the higher rhos for block 5
+
+## 25/12/2019
+
+so the high background rho from block 100 finally
+ended just now - 
+
+```
+real    16790m43.472s
+user    171422m39.747s
+sys     34m22.958s
+```
+
+lol
+
+queuing up higher rho for block 5, 6k
+
+## 26/12/2019
+
+queuing up higher rho for blocks 10 and 50, 6k
+
+## 31/12/2019
+
+finally! block 100 for 6k
+
+also need to use the hotspots script above to turn the 4k files into 4 kb
+windows w/ varying flank sizes (maybe 2 kb windows? play around with this) w/ a
+similar directory structure to what you have locally - then redo hotspot
+analysis *in full* using these new datasets + flank sizes
+
+## 1/1/2020
+
+happy new year, champ
+
+let's summarise these LDhelmet outfiles for hotspot detection - the dir structure is
+slightly different this time around, but should be possible to work with it just fine
+
+need to modify `summarise_hotspots.sh` slightly to accout for this ofc
+
+```bash
+w=$1
+flank=$2
+size=$3
+base=data/macs-runs-hotspot-length/hot_${size}k
+
+echo "running with windowsize ${w} and flank size ${flank}"
+echo "for hotspot size ${size}k"
+
+sleep 3
+
+for block in 5 10 50 100; do
+    mkdir -p ${base}/ldhelmet_${w}_${flank}/block_${block};
+    for rho in 0.0001 0.001 0.01 0.1 1.0 2.5; do
+        echo "currently on rho ${rho} for block ${block}";
+        for run in {0..9}; do
+            python3.5 analysis/block-penalty/find_hotspots.py \
+            --input ${base}/ldhelmet/block_${block}/finals/haplo_rho${rho}_10${run}.txt \
+            --out ${base}/ldhelmet_${w}_${flank}/block_${block}/haplo_rho${rho}_10${run}.txt \
+            --chr sim \
+            --block ${w} \
+            --flank ${flank} ;
+        done
+    done
+done
+```
+
+2 kb windows and 20 kb flank sizes for 4 kb hotspots:
+
+```bash
+time bash analysis/block-penalty/summarise_hotspots_length.sh 2000 20000 4
+```
+
+took about 51 min, about par for the course compared to last time
+
+looping over remaining combinations:
+
+```bash
+time for flank in 40000 60000 80000 100000; do
+    echo "currently on flank ${flank}"
+    time bash analysis/block-penalty/summarise_hotspots_length.sh 2000 ${flank} 4 ;
+done
+```
+
+
+
+
+
+
 
